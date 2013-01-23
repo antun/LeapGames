@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<title>Letters</title>
+
+<meta name="description" content="Simple LEAP Motion app for spelling words. Push beyond the origin of the Z-axis to pick up a letter." />
+
+<style>
+#lettersContainer {
+    position: relative;
+    background-color: #ffff00;
+}
+.letter {
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 120px;
+    font-weight: bold;
+    position: absolute;
+}
+#finger1 {
+    position: absolute;
+}
+</style>
+<script src="lib/jquery-1.9.0.js"></script>
+<script>
+
+function initDrawingArea() {
+    var overallHeight = $( document ).height();
+    var currentY = $(lettersContainer).position()["top"];
+    var remainingHeight = overallHeight - currentY;
+    // TODO: include margin
+    $(lettersContainer).height(remainingHeight);
+}
+
+var letters = ["#letterD", "#letterO", "#letterG"];
+function initLetters() {
+    for (var i in letters) {
+        var letter = letters[i];
+        var topPosition = $(lettersContainer).height() - $(letter).height();
+        var leftPosition = ($(lettersContainer).width() - $(letter).width()) * Math.random();
+        $(letter).css({ position: "absolute",
+            marginLeft: 0, marginTop: 0,
+            top: topPosition, left: leftPosition });
+        
+    }
+}
+
+function handleLeapInput(obj) {
+    if (!obj) return;
+    if (!obj.pointables) return;
+    if (obj.pointables.length > 0) {
+        var pointable = obj.pointables[0];
+        var zPos = pointable.tipPosition[2];
+        var minimumZ = 80
+        if (zPos > minimumZ) return;
+        if (zPos <= 10) handlePointerPush();
+        if (zPos > 10) handlePointerRelease();
+        var xPos = pointable.tipPosition[0] + 100;
+        xPos = $(lettersContainer).width() * (xPos / 200);
+        var yPos = pointable.tipPosition[1];
+        yPos = (yPos / 365) * $(lettersContainer).height() - 50;
+        //var ctx = $(fingers[i]).getContext("2d");
+        // TODO: JQuery-ify this:
+        //var ctx = document.getElementById("finger1").getContext("2d");
+        //ctx.arc(xPos,yPos,20,0,2*Math.PI);
+        //ctx.stroke();
+        updatePointerLocation(xPos, yPos);
+    } else {
+        handlePointerRelease();
+    }
+}
+
+var DRAGGING_LETTER = null;
+function handlePointerPush() {
+    $("#pointer").css({ 'color': '#ff0000' });
+    var letter = checkPointerOver();
+    if (letter) {
+        beginDrag(letter);
+    } 
+}
+
+function handlePointerRelease() {
+    $("#pointer").css({ 'color': '#000000' });
+    endDrag();
+}
+
+function beginDrag(letter) {
+    DRAGGING_LETTER = letter;
+}
+function endDrag() {
+    DRAGGING_LETTER = null;
+}
+
+function updateDraggedLetterPosition() {
+    if (!DRAGGING_LETTER) return;
+    // TODO: Handle location where user moused-down
+    var topPos = $("#pointer").position()["top"] - $(DRAGGING_LETTER).height()/2;
+    var leftPos = $("#pointer").position()["left"] - $(DRAGGING_LETTER).width()/2;
+    $(DRAGGING_LETTER).css({ position: "absolute",
+        marginLeft: 0, marginTop: 0,
+        top: topPos, left: leftPos });
+}
+
+function updatePointerLocation(xPos,yPos) {
+    $("#pointer").css({ position: "absolute",
+        marginLeft: 0, marginTop: 0,
+        bottom: yPos, left: xPos });
+    checkPointerOver();
+    if (DRAGGING_LETTER) {
+        updateDraggedLetterPosition();
+    }
+}
+
+function checkPointerOver() {
+    if (DRAGGING_LETTER) return;
+    var overLetter = null;
+    for (var i in letters) {
+        var letter = letters[i];
+        var letterObj = $(letter);
+        var topMin = letterObj.position()["top"];
+        var topMax = letterObj.position()["top"] + letterObj.height();
+        var leftMin = letterObj.position()["left"];
+        var leftMax = letterObj.position()["left"] + letterObj.width();
+        var pointerTop = $("#pointer").position()["top"];
+        var pointerLeft = $("#pointer").position()["left"];
+        if ((pointerTop > topMin && pointerTop < topMax) && (pointerLeft > leftMin && pointerLeft < leftMax)) {
+            //console.log("covering letter", letter);
+            // TODO: Make a manager class for this. 
+            $(letter).css({ 'background-color': '#ff00ff' });
+            overLetter = letter;
+            return overLetter;
+        } else {
+            $(letter).css({ 'background-color': 'transparent' });
+        }
+    }
+    return overLetter;
+}
+
+$( document ).ready( function() {
+  init();
+  initDrawingArea();
+  initLetters();
+});
+
+</script>
+<script>
+var ws;
+
+// Support both the WebSocket and MozWebSocket objects
+if ((typeof(WebSocket) == 'undefined') &&
+    (typeof(MozWebSocket) != 'undefined')) {
+  WebSocket = MozWebSocket;
+}
+
+// Create the socket with event handlers
+function init() {
+  //Create and open the socket
+  ws = new WebSocket("ws://localhost:6437/");
+  
+  // On successful connection
+  ws.onopen = function(event) {
+    document.getElementById("main").style.visibility = "visible";
+    document.getElementById("connection").innerHTML = "WebSocket connection open!";
+  };
+  
+  // On message received
+  ws.onmessage = function(event) {
+    var obj = JSON.parse(event.data);
+    var str = JSON.stringify(obj, undefined, 2);
+    //document.getElementById("output").innerHTML = '<pre>' + str + '</pre>';
+    handleLeapInput(obj);
+  };
+  
+  // On socket close
+  ws.onclose = function(event) {
+    ws = null;
+    document.getElementById("main").style.visibility = "hidden";
+    document.getElementById("connection").innerHTML = "WebSocket connection closed";
+  }
+  
+  //On socket error
+  ws.onerror = function(event) {
+    alert("Received error");
+  };
+}
+</script>
+</head>
+<body>
+    <h1>Letters</h1>
+    <div id="connection">WebSocket not connected</div>
+    <div id="main" style="visibility:hidden">
+    <div id="output"></div>
+    </div>
+
+    <div id="lettersContainer">
+        <span class="letter" id="letterD">d</span>
+        <span class="letter" id="letterO">o</span>
+        <span class="letter" id="letterG">g</span>
+        <!--
+        <canvas id="finger1">
+        </canvas>
+        -->
+        <span id="pointer" style="position: absolute; font-size: 24px">o</span>
+    </div>
+
+</body>
+</html>
